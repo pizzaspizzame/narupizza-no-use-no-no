@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>본문 변환기 v2.3</title>
+<link href="https://fonts.googleapis.com/css2?family=Gowun+Dodum&family=Noto+Serif+KR:wght@200..900&display=swap" rel="stylesheet">
+<style>
+  body { font-family: 'Gowun Dodum', sans-serif; background: #fff; padding: 2rem; display: flex; flex-direction: column; align-items: center; }
+  h2 { font-size: 20px; color: #ffb6c1; margin-bottom: 10px; font-family: 'Noto Serif KR', serif; }
+  textarea { width: 90%; max-width: 600px; height: 120px; padding: 10px; font-size: 11px; border-radius: 8px; border: 1px solid #ccc; margin-bottom: 20px; }
+  
+  .input-group { display: flex; align-items: center; margin-bottom: 10px; width: 100%; max-width: 400px; gap: 8px; font-size: 14px; }
+  .input-group input[type="number"], .input-group input[type="text"] { border: none; border-bottom: 2px solid #ccc; padding: 2px 5px; }
+  .input-group input[type="text"] { flex: 1; }
+
+  #characterColors { width: 100%; max-width: 400px; margin: 15px 0; padding: 10px; border: 1px dashed #ffb6c1; border-radius: 8px; display: none; }
+  .color-row { display: flex; align-items: center; gap: 10px; margin-bottom: 5px; font-size: 13px; }
+  .color-row input[type="color"] { border: none; width: 30px; height: 30px; cursor: pointer; background: none; }
+
+  .button-group { display: flex; gap: 10px; margin-top: 10px; }
+  button { padding: 8px 20px; border-radius: 20px; border: none; font-size: 14px; cursor: pointer; transition: 0.2s; margin-bottom: 12px; color: #fff; }
+  #extractBtn { background-color: #6c757d; }
+  #applyBtn { background-color: #1e90ff; }
+  #copyBtn { background-color: #ffb6c1; }
+  
+  /* 결과창 설정: white-space: pre를 사용하여 줄바꿈 유지 */
+  #result { 
+    width: 90%; 
+    font-size: 12px; 
+    max-width: 600px; 
+    height: 300px; 
+    border: 1px solid #ccc; 
+    padding: 10px; 
+    overflow: auto; 
+    white-space: pre; 
+    word-wrap: normal;
+    border-radius: 8px; 
+    background: #f9f9f9;
+    font-family: monospace;
+  }
+</style>
+</head>
+<body>
+
+<h2>본문 변환기</h2>
+
+<textarea id="source" placeholder="여기에 본문 HTML을 붙여넣으세요"></textarea>
+
+<button id="extractBtn">1. 캐릭터 이름 추출</button>
+
+<div id="characterColors">
+  <p style="font-size: 12px; margin-top: 0;">이름에 적용할 색상을 선택하세요:</p>
+  <div id="colorPickerList"></div>
+</div>
+
+<div class="input-group"><label><input type="checkbox" id="checkPx" checked> 주사위 박스 수정 (100%)</label></div>
+<div class="input-group"><label><input type="checkbox" id="checkLine"> 줄 간격 넓히기</label></div>
+<div class="input-group"><label><input type="checkbox" id="checkFont"> 폰트 14px</label></div>
+<div class="input-group"><label><input type="checkbox" id="checkColor"> 전체 흰 배경</label></div>
+<div class="input-group"><label><input type="checkbox" id="checkCircle"> 인장을 동그랗게</label></div>
+<div class="input-group">
+  <label><input type="checkbox" id="checkImg"> 이미지 최대 너비 수정:</label>
+  <input type="number" id="imgPxValue" placeholder="300"> px
+</div>
+
+<hr style="width:100%; max-width:400px; margin:20px 0; border: 0; border-top: 1px solid #eee;">
+
+<div class="input-group"><label>티알 제목:</label><input type="text" id="trpgTitle"></div>
+<div class="input-group"><label>페어/날짜:</label><input type="text" id="trpgInfo"></div>
+<div class="input-group"><label>이미지 URL:</label><input type="text" id="trpgImg"></div>
+
+<div class="button-group">
+  <button id="applyBtn">2. 적용</button>
+  <button id="copyBtn">3. 복사</button>
+</div>
+
+<div id="result"></div>
+
+<script>
+let charList = [];
+
+document.getElementById('extractBtn').addEventListener('click', () => {
+  const htmlContent = document.getElementById('source').value;
+  if (!htmlContent) return alert("HTML을 먼저 입력해주세요.");
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(htmlContent, 'text/html');
+  const names = new Set();
+  doc.querySelectorAll('.by').forEach(span => {
+    let name = span.textContent.replace(':', '').trim();
+    if(name) names.add(name);
+  });
+  const pickerList = document.getElementById('colorPickerList');
+  pickerList.innerHTML = '';
+  charList = Array.from(names);
+  if (charList.length === 0) return alert("캐릭터 이름을 찾지 못했습니다.");
+  charList.forEach(name => {
+    const row = document.createElement('div');
+    row.className = 'color-row';
+    row.innerHTML = `<input type="color" data-name="${name}" value="#000000"><span>${name}</span>`;
+    pickerList.appendChild(row);
+  });
+  document.getElementById('characterColors').style.display = 'block';
+});
+
+function applySelected() {
+  let htmlString = document.getElementById('source').value;
+  if (!htmlString) return;
+  const parser = new DOMParser();
+  const doc = parser.parseFromString(htmlString, 'text/html');
+  const colorSettings = {};
+  document.querySelectorAll('#colorPickerList input').forEach(input => {
+    colorSettings[input.dataset.name] = input.value;
+  });
+
+  const messages = doc.querySelectorAll('.message');
+  messages.forEach(msg => {
+    if (document.getElementById('checkFont').checked && msg.style.fontSize === '13.65px') msg.style.fontSize = '14px';
+    if (document.getElementById('checkLine').checked) {
+      if (msg.style.paddingBottom === '7px') msg.style.paddingBottom = '12px';
+      const spacer = msg.querySelector('.spacer');
+      if (spacer && spacer.style.marginBottom === '7px') spacer.style.marginBottom = '12px';
+    }
+    if (document.getElementById('checkColor').checked) {
+      const bg = msg.style.backgroundColor;
+      if (bg.includes('241, 241, 241') || bg.includes('211, 229, 245')) msg.style.backgroundColor = 'rgb(255, 255, 255)';
+      const spacer = msg.querySelector('.spacer');
+      if (spacer) spacer.style.backgroundColor = 'rgb(230, 230, 230)';
+    }
+    if (document.getElementById('checkCircle').checked) {
+      const img = msg.querySelector('.avatar img');
+      if (img) { img.style.objectFit = 'cover'; img.style.borderRadius = '100%'; }
+    }
+    const bySpan = msg.querySelector('.by');
+    if (bySpan) {
+      const charName = bySpan.textContent.replace(':', '').trim();
+      if (colorSettings[charName]) bySpan.style.color = colorSettings[charName];
+    }
+    if (document.getElementById('checkImg').checked) {
+      let imgPx = document.getElementById('imgPxValue').value || '300';
+      msg.querySelectorAll('img').forEach(img => {
+        if (img.style.maxWidth === '100%' || img.getAttribute('style')?.includes('max-width: 100%')) img.style.maxWidth = imgPx + 'px';
+      });
+    }
+  });
+
+  let resultHtml = doc.body.innerHTML;
+  if (document.getElementById('checkPx').checked) {
+    resultHtml = resultHtml.replace(/style="([^"]*border:\s*1px\s*solid\s*black[^"]*)"/g, (match, p1) => {
+      return `style="${p1.replace(/width:\s*[\d.]+px/g, 'width: 100%')}"`;
+    });
+  }
+
+  const titleVal = document.getElementById('trpgTitle').value || "티알 제목";
+  const infoVal = document.getElementById('trpgInfo').value || "#페어명 | 날짜";
+  const imgVal = document.getElementById('trpgImg').value || "관련 이미지 URL";
+
+  // 템플릿 결합 (백틱 내부의 줄바꿈이 그대로 유지됨)
+  const finalTemplate = `<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${titleVal}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Nanum+Gothic&display=swap" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=BBH+Sans+Bartle&family=Lobster&display=swap" rel="stylesheet"> 
+  <style>
+    body { margin: 0; font-family: 'Noto sans', sans-serif; background-color: white; display: flex; justify-content: center; padding: 2rem; }
+    .layout { display: flex; width: 90%; max-width: 1200px; gap: 40px; }
+    .sidebar { width: 220px; padding: 1.5rem 0; }
+    .sidebar h2 { font-size: 24px; font-weight: bold; color: #000; cursor: default; margin-bottom: 30px; font-family: 'BBH Sans Bartle', sans-serif; }
+    .sidebar ul { list-style: none; padding: 0; margin: 0; }
+    .sidebar li { margin-bottom: 0.8rem; }
+    .category-item { font-size: 14px; cursor: pointer; position: relative; padding: 2px 4px; }
+    .category-item::before { content: ''; position: absolute; left: 0; top: 0; width: 0; height: 100%; background-color: #d0ebff; z-index: -1; transition: width 0.5s ease; }
+    .category-item:hover::before { width: 80%; }
+    .category-item a { text-decoration: none; color: black; }
+    .content { flex: 1; padding: 2rem; background-color: white; border: 1px solid #ddd; border-radius: 10px; }
+    .content h1 { font-size: 20px; margin-bottom: 0.5rem; }
+    .content p { color: #666; font-size: 14px; }
+    .content img { width: 100%; max-height: 350px; object-fit: cover; margin: 7px 0; cursor: pointer; }
+    article { white-space: pre-wrap; font-size: 15px; margin-top: 1rem; line-height: 1.6; }
+    #overlay { display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; background-color: rgba(0,0,0,0.8); justify-content: center; align-items: center; z-index: 1000; }
+    #overlay img { max-width: 90%; max-height: 90%; }
+    @media (max-width: 768px) {
+      body { padding: 1rem; }
+      .layout { flex-direction: column; width: 100%; gap: 20px; }
+      .sidebar { width: 100%; padding: 0; text-align: center; }
+      .sidebar h2 { margin-bottom: 15px; font-size: 32px; }
+      .sidebar ul { display: flex; justify-content: center; flex-wrap: wrap; gap: 10px; }
+      .sidebar li { margin-bottom: 0; }
+      .category-item:hover::before { width: 100%; }
+      .content { padding: 1.5rem; }
+    }
+  </style>
+</head>
+<body>
+  <div class="layout">
+    <aside class="sidebar">
+      <h2>ALL<br>KILL<br>PIZZA</h2>
+      <ul>
+        <li><div class="category-item"><a href="https://pizza-box.naru.pub/">MAIN</a></div></li>
+        <li><div class="category-item"><a href="https://pizza-box.naru.pub/NOTICE.html">NOTICE</a></div></li>
+        <li><div class="category-item"><a href="https://pizza-box.naru.pub/TRPG.html">TRPG</a></div></li>
+        <li><div class="category-item"><a href="https://pizza-box.naru.pub/Gallery.html">Gallery</a></div></li>
+      </ul>
+    </aside>
+    <section class="content">
+      <h1>${titleVal}</h1>
+      <p>${infoVal}</p>
+      <img src="${imgVal}" alt="세션 이미지" onclick="showOverlay('${imgVal}')">
+      <article>${resultHtml}</article>
+    </section>
+  </div>
+  <div id="overlay" onclick="hideOverlay()"><img id="overlayImg" src="" alt=""></div>
+  <script>
+    function showOverlay(src) {
+      document.getElementById("overlayImg").src = src;
+      document.getElementById("overlay").style.display = "flex";
+    }
+    function hideOverlay() {
+      document.getElementById("overlay").style.display = "none";
+    }
+  <\/script>
+</body>
+</html>`;
+
+  document.getElementById('result').textContent = finalTemplate;
+}
+
+document.getElementById('applyBtn').addEventListener('click', applySelected);
+document.getElementById('copyBtn').addEventListener('click', () => {
+  const output = document.getElementById('result');
+  // textContent를 사용해 줄바꿈 포함 텍스트를 그대로 가져옵니다.
+  navigator.clipboard.writeText(output.textContent).then(() => {
+    alert('복사되었습니다!');
+  });
+});
+</script>
+</body>
+</html>
